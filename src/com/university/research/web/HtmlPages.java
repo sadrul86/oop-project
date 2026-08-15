@@ -3,10 +3,13 @@ package com.university.research.web;
 import com.university.research.model.JoinRequest;
 import com.university.research.model.ResearchTeam;
 import com.university.research.model.Researcher;
+import com.university.research.model.TeamDiscussionPost;
+import com.university.research.model.TeamMeeting;
 import com.university.research.model.UserAccount;
 import com.university.research.service.MatchingService.TeamMatch;
 import com.university.research.util.WebUtil;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
@@ -33,7 +36,7 @@ public final class HtmlPages {
                   <div class="hero-copy">
                     <span class="eyebrow">JAVA + OBJECT-ORIENTED PROGRAMMING</span>
                     <h1>Form realistic university research teams.</h1>
-                    <p>Authenticated students and faculty manage their own profiles, discover teams and send join requests. Only the correct team leader can approve or reject a request.</p>
+                    <p>Authenticated students and faculty manage their own profiles, discover teams and send join requests. Approved members can continue their work through private team discussions and scheduled research meetings.</p>
                     <div class="hero-actions">
                 """).append("<a class=\"btn primary\" href=\"").append(primaryUrl).append("\">").append(primaryText).append("</a>")
                 .append("<a class=\"btn secondary\" href=\"").append(secondaryUrl).append("\">").append(secondaryText).append("</a></div>")
@@ -63,7 +66,7 @@ public final class HtmlPages {
                     <div class="process-card"><span>01</span><h3>Log in</h3><p>Every action is connected to a real user account and one research profile.</p></div>
                     <div class="process-card"><span>02</span><h3>Find a team</h3><p>Browse research areas or use your profile-based compatibility matches.</p></div>
                     <div class="process-card"><span>03</span><h3>Send your request</h3><p>The logged-in user can only send a request as their own research profile.</p></div>
-                    <div class="process-card"><span>04</span><h3>Leader decides</h3><p>Only the destination team's leader, or an administrator, can approve or reject it.</p></div>
+                    <div class="process-card"><span>04</span><h3>Collaborate</h3><p>After approval, members can use their private team discussion and view scheduled research meetings.</p></div>
                   </div>
                 </section>
                 """);
@@ -218,11 +221,13 @@ public final class HtmlPages {
 
     public static String teamDetail(ResearchTeam team, Researcher leader, List<Researcher> members,
                                     List<JoinRequest> teamRequests, Map<Integer, Researcher> researchers,
+                                    List<TeamDiscussionPost> discussionPosts, List<TeamMeeting> meetings,
                                     UserAccount user, Researcher profile, String message) {
         StringBuilder body = new StringBuilder();
         boolean admin = user != null && user.isAdmin();
         boolean isLeader = profile != null && profile.getId() == team.getLeaderId();
         boolean isMember = profile != null && team.getMemberIds().contains(profile.getId());
+        boolean canViewWorkspace = admin || isMember;
         JoinRequest ownRequest = profile == null ? null : teamRequests.stream()
                 .filter(r -> r.getResearcherId() == profile.getId()).findFirst().orElse(null);
 
@@ -236,7 +241,13 @@ public final class HtmlPages {
                 .append(Math.min(100, (int) Math.round(100.0 * members.size() / team.getTargetSize()))).append("%\"></i></div><small>")
                 .append(team.openSlots()).append(" open slot(s)</small></div></section>");
 
-        body.append("<div class=\"detail-grid\"><section class=\"panel\"><div class=\"panel-heading\"><h2>Current members</h2><span>").append(members.size()).append(" member(s)</span></div><div class=\"member-list\">");
+        body.append("<nav class=\"workspace-tabs\"><a href=\"#members\">Members</a><a href=\"#discussion\">Team Discussion")
+                .append(canViewWorkspace ? "" : " 🔒")
+                .append("</a><a href=\"#meetings\">Meetings")
+                .append(canViewWorkspace ? "" : " 🔒")
+                .append("</a></nav>");
+
+        body.append("<div class=\"detail-grid\"><section class=\"panel\" id=\"members\"><div class=\"panel-heading\"><h2>Current members</h2><span>").append(members.size()).append(" member(s)</span></div><div class=\"member-list\">");
         for (Researcher member : members) {
             body.append("<div class=\"member-row\"><div class=\"avatar\">").append(initials(member.getName())).append("</div><div class=\"member-main\"><strong>")
                     .append(WebUtil.escape(member.getName())).append("</strong><span>").append(WebUtil.escape(member.getDepartment())).append(" · ").append(member.getRole()).append("</span></div>");
@@ -249,9 +260,9 @@ public final class HtmlPages {
         } else if (admin) {
             body.append("<div class=\"notice\">Administrator accounts review system activity but do not join research teams.</div>");
         } else if (isLeader) {
-            body.append("<div class=\"notice\">You are the leader of this team. You cannot request to join your own team.</div><a class=\"btn primary full-btn\" href=\"/requests\">Manage team requests</a>");
+            body.append("<div class=\"notice\">You are the leader of this team. Open the private workspace below to discuss research and schedule meetings.</div><a class=\"btn primary full-btn\" href=\"#discussion\">Open team workspace</a>");
         } else if (isMember) {
-            body.append("<div class=\"notice\">You are already a member of this research team.</div>");
+            body.append("<div class=\"notice\">You are an approved member of this research team.</div><a class=\"btn primary full-btn\" href=\"#discussion\">Open team workspace</a>");
         } else if (ownRequest != null && (ownRequest.getStatus() == JoinRequest.Status.PENDING || ownRequest.getStatus() == JoinRequest.Status.APPROVED)) {
             body.append("<div class=\"notice\">Your request status: <strong>").append(ownRequest.getStatus()).append("</strong>. You cannot submit another request.</div><a class=\"btn secondary full-btn\" href=\"/requests\">View my requests</a>");
         } else if (team.openSlots() <= 0) {
@@ -272,6 +283,85 @@ public final class HtmlPages {
             }
             body.append("</div></section>");
         }
+
+        body.append("<section class=\"workspace-section\"><div class=\"workspace-heading\"><span class=\"eyebrow\">PRIVATE TEAM WORKSPACE</span><h2>Discuss, coordinate and meet</h2><p>Only approved team members can access collaboration content. The team leader controls meeting scheduling.</p></div><div class=\"collaboration-grid\">");
+
+        body.append("<section class=\"panel discussion-panel\" id=\"discussion\"><div class=\"panel-heading\"><div><h2>Team Discussion</h2><span>Research updates and coordination</span></div>");
+        if (canViewWorkspace) body.append("<span class=\"badge active\">").append(discussionPosts.size()).append(" post(s)</span>");
+        body.append("</div>");
+        if (!canViewWorkspace) {
+            body.append(lockedWorkspace("Private discussion", "Only approved team members can read or post in this discussion. Join the team first to unlock the workspace."));
+        } else {
+            if (isMember) {
+                body.append("<form class=\"discussion-form\" method=\"post\" action=\"/teams/discussion\"><input type=\"hidden\" name=\"teamId\" value=\"")
+                        .append(team.getId()).append("\"><div class=\"field\"><label>Post an update</label><textarea name=\"message\" rows=\"3\" maxlength=\"1000\" required placeholder=\"Share progress, ask a research question or coordinate the next task...\"></textarea></div><div class=\"discussion-submit\"><span>Posting as ")
+                        .append(WebUtil.escape(profile.getName())).append("</span><button class=\"btn primary compact\" type=\"submit\">Post message</button></div></form>");
+            } else {
+                body.append("<div class=\"notice\">Administrator view is read-only. Discussion posts are created by approved team members.</div>");
+            }
+            body.append("<div class=\"discussion-list\">");
+            if (discussionPosts.isEmpty()) {
+                body.append("<div class=\"workspace-empty\"><strong>No discussion yet</strong><span>Start with a research update, question or task.</span></div>");
+            }
+            for (TeamDiscussionPost post : discussionPosts) {
+                Researcher author = researchers.get(post.getAuthorResearcherId());
+                String authorName = author == null ? "Researcher" : author.getName();
+                String authorMeta = author == null ? "Team member" : author.getDepartment() + " · " + author.getRole();
+                body.append("<article class=\"discussion-post\"><div class=\"avatar\">").append(initials(authorName)).append("</div><div class=\"discussion-body\"><div class=\"discussion-meta\"><div><strong>")
+                        .append(WebUtil.escape(authorName)).append("</strong><span>").append(WebUtil.escape(authorMeta)).append("</span></div><time>")
+                        .append(post.getCreatedAt().format(DATETIME)).append("</time></div><p>")
+                        .append(WebUtil.escape(post.getMessage()).replace("\n", "<br>"))
+                        .append("</p></div></article>");
+            }
+            body.append("</div>");
+        }
+        body.append("</section>");
+
+        body.append("<section class=\"panel meeting-panel\" id=\"meetings\"><div class=\"panel-heading\"><div><h2>Team Meetings</h2><span>Schedule and join research meetings</span></div>");
+        if (canViewWorkspace) body.append("<span class=\"badge role\">").append(meetings.size()).append(" meeting(s)</span>");
+        body.append("</div>");
+        if (!canViewWorkspace) {
+            body.append(lockedWorkspace("Private meeting schedule", "Meeting dates, agendas and links are visible only to approved team members."));
+        } else {
+            if (isLeader) {
+                body.append("<details class=\"meeting-create\"><summary>+ Schedule a meeting</summary><form method=\"post\" action=\"/teams/meetings\" class=\"form-grid\"><input type=\"hidden\" name=\"teamId\" value=\"")
+                        .append(team.getId()).append("\"><div class=\"field\"><label>Meeting title *</label><input name=\"title\" maxlength=\"120\" required placeholder=\"Weekly Research Meeting\"></div><div class=\"form-grid two\"><div class=\"field\"><label>Date *</label><input type=\"date\" name=\"date\" required></div><div class=\"field\"><label>Time *</label><input type=\"time\" name=\"time\" required></div></div><div class=\"field\"><label>Meeting link</label><input type=\"url\" name=\"meetingLink\" maxlength=\"500\" placeholder=\"https://meet.google.com/...\"></div><div class=\"field\"><label>Agenda</label><textarea name=\"agenda\" rows=\"3\" maxlength=\"800\" placeholder=\"Topics to discuss, preparation and expected decisions...\"></textarea></div><button class=\"btn primary compact\" type=\"submit\">Schedule meeting</button></form></details>");
+            } else if (admin) {
+                body.append("<div class=\"notice\">Administrator view is read-only. Only the team leader can schedule meetings.</div>");
+            } else {
+                body.append("<div class=\"notice\">All team members can view and join meetings. Only the team leader can create the schedule.</div>");
+            }
+
+            body.append("<div class=\"meeting-list\">");
+            if (meetings.isEmpty()) {
+                body.append("<div class=\"workspace-empty\"><strong>No meetings scheduled</strong><span>The team leader can add the first research meeting.</span></div>");
+            }
+            LocalDateTime now = LocalDateTime.now();
+            for (TeamMeeting meeting : meetings) {
+                boolean upcoming = meeting.getScheduledAt().isAfter(now);
+                Researcher creator = researchers.get(meeting.getCreatedByResearcherId());
+                body.append("<article class=\"meeting-card\"><div class=\"meeting-date\"><strong>")
+                        .append(meeting.getScheduledAt().format(DateTimeFormatter.ofPattern("dd"))).append("</strong><span>")
+                        .append(meeting.getScheduledAt().format(DateTimeFormatter.ofPattern("MMM"))).append("</span></div><div class=\"meeting-main\"><div class=\"meeting-title-line\"><h3>")
+                        .append(WebUtil.escape(meeting.getTitle())).append("</h3><span class=\"badge ").append(upcoming ? "active" : "completed").append("\">")
+                        .append(upcoming ? "UPCOMING" : "PAST").append("</span></div><p class=\"meeting-time\">")
+                        .append(meeting.getScheduledAt().format(DATETIME)).append("</p>");
+                if (!meeting.getAgenda().isBlank()) {
+                    body.append("<p class=\"meeting-agenda\">").append(WebUtil.escape(meeting.getAgenda())).append("</p>");
+                }
+                body.append("<small>Scheduled by ").append(WebUtil.escape(creator == null ? "Team leader" : creator.getName())).append("</small></div><div class=\"meeting-actions\">");
+                if (upcoming && !meeting.getMeetingLink().isBlank()) {
+                    body.append("<a class=\"btn primary compact\" target=\"_blank\" rel=\"noopener noreferrer\" href=\"")
+                            .append(WebUtil.escape(meeting.getMeetingLink())).append("\">Join meeting</a>");
+                } else if (upcoming) {
+                    body.append("<span class=\"muted\">No online link</span>");
+                }
+                body.append("</div></article>");
+            }
+            body.append("</div>");
+        }
+        body.append("</section></div></section>");
+
         return layout(team.getName(), body.toString(), message, user, profile);
     }
 
@@ -353,6 +443,10 @@ public final class HtmlPages {
         return "<article class=\"team-card\"><div class=\"team-topline\"><span class=\"badge " + statusClass(t.getStatus().name()) + "\">" + t.getStatus() + "</span><span>" + WebUtil.escape(t.getResearchArea()) + "</span></div><h3>" + WebUtil.escape(t.getName()) + "</h3><p>" + WebUtil.escape(t.getDescription()) + "</p><div class=\"capacity-line\"><span>Team members</span><strong>" + filled + " / " + t.getTargetSize() + "</strong></div><div class=\"progress\"><i style=\"width:" + pct + "%\"></i></div><div class=\"card-footer\"><span>" + t.openSlots() + " open slot(s)</span><a href=\"/teams/view?id=" + t.getId() + "\">View team →</a></div></article>";
     }
 
+    private static String lockedWorkspace(String title, String text) {
+        return "<div class=\"workspace-lock\"><span>🔒</span><div><strong>" + WebUtil.escape(title) + "</strong><p>" + WebUtil.escape(text) + "</p></div></div>";
+    }
+
     private static String requestRow(JoinRequest request, ResearchTeam team, Researcher researcher, boolean actions) {
         StringBuilder row = new StringBuilder();
         row.append("<article class=\"request-row\"><div class=\"avatar\">").append(initials(researcher.getName())).append("</div><div class=\"request-main\"><div class=\"request-title\"><strong>")
@@ -378,7 +472,7 @@ public final class HtmlPages {
         return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"description\" content=\"University Research Formation Team System built with Java and OOP.\"><title>" + WebUtil.escape(title) + " | UniResearch</title><link rel=\"stylesheet\" href=\"/assets/style.css\"></head><body>" +
                 "<header class=\"site-header\"><div class=\"container nav-wrap\"><a class=\"brand\" href=\"/\"><span class=\"brand-mark\">UR</span><span><strong>UniResearch</strong><small>Team Formation System</small></span></a><button class=\"nav-toggle\" aria-label=\"Toggle navigation\" onclick=\"document.querySelector('.nav-links').classList.toggle('open')\">☰</button><nav class=\"nav-links\"><a href=\"/\">Home</a><a href=\"/researchers\">Researchers</a><a href=\"/teams\">Teams</a><a href=\"/about\">About</a>" + authNav + "</nav></div></header>" +
                 "<main class=\"container main-content\">" + flash + body + "</main>" +
-                "<footer class=\"site-footer\"><div class=\"container footer-grid\"><div><div class=\"brand footer-brand\"><span class=\"brand-mark\">UR</span><span><strong>UniResearch</strong><small>Java OOP Project</small></span></div><p>Authenticated university research collaboration with role-based permissions.</p></div><div><strong>Project modules</strong><a href=\"/researchers\">Researcher Directory</a><a href=\"/teams\">Team Formation</a><a href=\"/requests\">Request Management</a></div><div><strong>Technology</strong><span>Java 21</span><span>Core Java HttpServer</span><span>PBKDF2 Password Hashing</span></div></div><div class=\"container footer-bottom\"><span>Academic OOP mini-project</span><span>Identity and authorization enforced in Java</span></div></footer><script src=\"/assets/app.js\"></script></body></html>";
+                "<footer class=\"site-footer\"><div class=\"container footer-grid\"><div><div class=\"brand footer-brand\"><span class=\"brand-mark\">UR</span><span><strong>UniResearch</strong><small>Java OOP Project</small></span></div><p>Authenticated university research collaboration with role-based permissions, private team discussions and meeting coordination.</p></div><div><strong>Project modules</strong><a href=\"/researchers\">Researcher Directory</a><a href=\"/teams\">Team Formation</a><a href=\"/requests\">Request Management</a></div><div><strong>Technology</strong><span>Java 21</span><span>Core Java HttpServer</span><span>PBKDF2 Password Hashing</span></div></div><div class=\"container footer-bottom\"><span>Academic OOP mini-project</span><span>Identity and authorization enforced in Java</span></div></footer><script src=\"/assets/app.js\"></script></body></html>";
     }
 
     private static String pageHeader(String title, String subtitle, String actionUrl, String actionText) {

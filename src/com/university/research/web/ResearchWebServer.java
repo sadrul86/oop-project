@@ -5,9 +5,12 @@ import com.sun.net.httpserver.HttpServer;
 import com.university.research.model.JoinRequest;
 import com.university.research.model.ResearchTeam;
 import com.university.research.model.Researcher;
+import com.university.research.model.TeamDiscussionPost;
+import com.university.research.model.TeamMeeting;
 import com.university.research.model.UserAccount;
 import com.university.research.repository.ResearchRepository;
 import com.university.research.service.AuthenticationService;
+import com.university.research.service.CollaborationService;
 import com.university.research.service.MatchingService;
 import com.university.research.service.ResearchService;
 import com.university.research.service.TeamService;
@@ -18,6 +21,8 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +34,7 @@ public class ResearchWebServer {
     private final AuthenticationService authenticationService;
     private final ResearchService researchService;
     private final TeamService teamService;
+    private final CollaborationService collaborationService;
     private final MatchingService matchingService;
     private final SessionManager sessionManager;
     private final Path publicDir;
@@ -38,6 +44,7 @@ public class ResearchWebServer {
         this.authenticationService = new AuthenticationService(repository);
         this.researchService = new ResearchService(repository);
         this.teamService = new TeamService(repository);
+        this.collaborationService = new CollaborationService(repository);
         this.matchingService = new MatchingService(repository);
         this.sessionManager = new SessionManager();
         this.publicDir = publicDir.toAbsolutePath().normalize();
@@ -77,6 +84,8 @@ public class ResearchWebServer {
             else if ("POST".equals(method) && "/teams".equals(path)) createTeam(exchange);
             else if ("GET".equals(method) && "/teams/view".equals(path)) showTeam(exchange);
             else if ("POST".equals(method) && "/teams/join".equals(path)) joinTeam(exchange);
+            else if ("POST".equals(method) && "/teams/discussion".equals(path)) postDiscussion(exchange);
+            else if ("POST".equals(method) && "/teams/meetings".equals(path)) scheduleMeeting(exchange);
             else if ("GET".equals(method) && "/requests".equals(path)) showRequests(exchange);
             else if ("POST".equals(method) && "/requests/approve".equals(path)) updateRequest(exchange, true);
             else if ("POST".equals(method) && "/requests/reject".equals(path)) updateRequest(exchange, false);
@@ -240,7 +249,15 @@ public class ResearchWebServer {
         repository.findAllResearchers().forEach(r -> researcherMap.put(r.getId(), r));
         UserAccount user = currentUser(exchange);
         Researcher profile = currentProfile(user);
-        sendHtml(exchange, 200, HtmlPages.teamDetail(team, leader, members, requests, researcherMap, user, profile, params.get("message")));
+        boolean workspaceAllowed = user != null && (user.isAdmin() || (profile != null && team.getMemberIds().contains(profile.getId())));
+        List<TeamDiscussionPost> discussionPosts = workspaceAllowed
+                ? collaborationService.listDiscussionPosts(id, profile == null ? null : profile.getId(), user.isAdmin())
+                : List.of();
+        List<TeamMeeting> meetings = workspaceAllowed
+                ? collaborationService.listMeetings(id, profile == null ? null : profile.getId(), user.isAdmin())
+                : List.of();
+        sendHtml(exchange, 200, HtmlPages.teamDetail(team, leader, members, requests, researcherMap,
+                discussionPosts, meetings, user, profile, params.get("message")));
     }
 
     private void joinTeam(HttpExchange exchange) throws IOException {
@@ -252,6 +269,37 @@ public class ResearchWebServer {
         int teamId = WebUtil.intParam(form, "teamId");
         teamService.requestToJoin(teamId, profile.getId(), form.get("message"));
         redirect(exchange, "/teams/view?id=" + teamId + "&message=" + WebUtil.encode("Your join request was submitted to the team leader."));
+    }
+
+    private void postDiscussion(HttpExchange exchange) throws IOException {
+        UserAccount user = requireUser(exchange);
+        if (user == null) return;
+        Researcher profile = requireProfile(exchange, user);
+        if (profile == null) return;
+        Map<String, String> form = WebUtil.formParams(exchange);
+        int teamId = WebUtil.intParam(form, "teamId");
+        collaborationService.addDiscussionPost(teamId, profile.getId(), form.get("message"));
+        redirect(exchange, "/teams/view?id=" + teamId + "&message=" + WebUtil.encode("Discussion message posted.") + "#discussion");
+    }
+
+    private void scheduleMeeting(HttpExchange exchange) throws IOException {
+        UserAccount user = requireUser(exchange);
+        if (user == null) return;
+        Researcher profile = requireProfile(exchange, user);
+        if (profile == null) return;
+        Map<String, String> form = WebUtil.formParams(exchange);
+        int teamId = WebUtil.intParam(form, "teamId");
+        String date = form.getOrDefault("date", "").trim();
+        String time = form.getOrDefault("time", "").trim();
+        LocalDateTime scheduledAt;
+        try {
+            scheduledAt = LocalDateTime.parse(date + "T" + time);
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException("Please select a valid meeting date and time.");
+        }
+        collaborationService.scheduleMeeting(teamId, profile.getId(), form.get("title"), form.get("agenda"),
+                form.get("meetingLink"), scheduledAt);
+        redirect(exchange, "/teams/view?id=" + teamId + "&message=" + WebUtil.encode("Team meeting scheduled.") + "#meetings");
     }
 
     private void showRequests(HttpExchange exchange) throws IOException {

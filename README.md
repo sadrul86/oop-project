@@ -18,6 +18,10 @@ A Java 21 + Object-Oriented Programming university mini-project for realistic re
 - Users cannot approve their own join request
 - Administrators can review and manage all requests
 - Team capacity validation
+- Private team discussion for approved members
+- Team leaders can schedule research meetings with date, time, agenda and meeting link
+- Approved members can view the meeting schedule and open the meeting link
+- Discussion and meeting data are persisted with the rest of the project data
 - Interest/skill-based team matching
 - File-backed demo persistence
 - PBKDF2-HMAC-SHA256 password hashing with per-user salt
@@ -45,6 +49,9 @@ These credentials are for academic demonstration only. The application does not 
 7. The destination team's leader logs in and sees the request under **Requests to Teams I Lead**.
 8. Only that leader (or an admin) can approve/reject.
 9. Approval adds the requester to the team and updates the request status.
+10. Approved members unlock the private **Team Discussion** and **Team Meetings** workspace.
+11. Members can post research updates and questions; only the team leader can schedule meetings.
+12. Meeting entries can contain a title, date/time, agenda and optional Google Meet/Zoom/other HTTPS link.
 
 ## OOP Structure
 
@@ -55,7 +62,9 @@ src/com/university/research/
 │   ├── UserAccount.java
 │   ├── Researcher.java
 │   ├── ResearchTeam.java
-│   └── JoinRequest.java
+│   ├── JoinRequest.java
+│   ├── TeamDiscussionPost.java
+│   └── TeamMeeting.java
 ├── repository/
 │   ├── ResearchRepository.java
 │   └── FileResearchRepository.java
@@ -63,6 +72,7 @@ src/com/university/research/
 │   ├── AuthenticationService.java
 │   ├── ResearchService.java
 │   ├── TeamService.java
+│   ├── CollaborationService.java
 │   └── MatchingService.java
 ├── util/
 │   ├── PasswordUtil.java
@@ -79,7 +89,8 @@ src/com/university/research/
 - **Abstraction:** `ResearchRepository` defines persistence operations independently of the file implementation.
 - **Polymorphism:** services depend on the `ResearchRepository` interface, so another implementation could replace file storage.
 - **Composition:** services collaborate with repository objects rather than putting all logic in the web server.
-- **Separation of concerns:** authentication, research profiles, teams, matching, persistence and HTTP presentation are separate classes.
+- **Separation of concerns:** authentication, research profiles, teams, collaboration, matching, persistence and HTTP presentation are separate classes.
+- **Workspace authorization:** `CollaborationService` keeps team discussions and meetings private to approved team members and restricts meeting creation to the team leader.
 - **Authorization in business logic:** `TeamService` verifies who is permitted to decide a request even if a user manually submits an HTTP request.
 
 ## Run Locally

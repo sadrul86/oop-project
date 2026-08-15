@@ -3,6 +3,8 @@ package com.university.research.repository;
 import com.university.research.model.JoinRequest;
 import com.university.research.model.ResearchTeam;
 import com.university.research.model.Researcher;
+import com.university.research.model.TeamDiscussionPost;
+import com.university.research.model.TeamMeeting;
 import com.university.research.model.UserAccount;
 import com.university.research.util.PasswordUtil;
 
@@ -25,6 +27,7 @@ public class FileResearchRepository implements ResearchRepository {
         normalizeState();
         if (state.researchers.isEmpty()) seedDemoData();
         if (state.userAccounts.isEmpty()) seedDemoAccounts();
+        if (state.discussionPosts.isEmpty() && state.meetings.isEmpty()) seedDemoCollaborationData();
         persist();
     }
 
@@ -86,6 +89,34 @@ public class FileResearchRepository implements ResearchRepository {
     public synchronized int nextJoinRequestId() { return state.nextJoinRequestId++; }
 
     @Override
+    public synchronized List<TeamDiscussionPost> findAllDiscussionPosts() { return new ArrayList<>(state.discussionPosts); }
+
+    @Override
+    public synchronized TeamDiscussionPost saveDiscussionPost(TeamDiscussionPost post) {
+        state.discussionPosts.removeIf(p -> p.getId() == post.getId());
+        state.discussionPosts.add(post);
+        persist();
+        return post;
+    }
+
+    @Override
+    public synchronized int nextDiscussionPostId() { return state.nextDiscussionPostId++; }
+
+    @Override
+    public synchronized List<TeamMeeting> findAllMeetings() { return new ArrayList<>(state.meetings); }
+
+    @Override
+    public synchronized TeamMeeting saveMeeting(TeamMeeting meeting) {
+        state.meetings.removeIf(m -> m.getId() == meeting.getId());
+        state.meetings.add(meeting);
+        persist();
+        return meeting;
+    }
+
+    @Override
+    public synchronized int nextMeetingId() { return state.nextMeetingId++; }
+
+    @Override
     public synchronized List<UserAccount> findAllUserAccounts() { return new ArrayList<>(state.userAccounts); }
 
     @Override
@@ -129,6 +160,8 @@ public class FileResearchRepository implements ResearchRepository {
         if (state.researchers == null) state.researchers = new ArrayList<>();
         if (state.teams == null) state.teams = new ArrayList<>();
         if (state.joinRequests == null) state.joinRequests = new ArrayList<>();
+        if (state.discussionPosts == null) state.discussionPosts = new ArrayList<>();
+        if (state.meetings == null) state.meetings = new ArrayList<>();
         if (state.userAccounts == null) state.userAccounts = new ArrayList<>();
         state.nextResearcherId = Math.max(state.nextResearcherId,
                 state.researchers.stream().mapToInt(Researcher::getId).max().orElse(0) + 1);
@@ -136,6 +169,10 @@ public class FileResearchRepository implements ResearchRepository {
                 state.teams.stream().mapToInt(ResearchTeam::getId).max().orElse(0) + 1);
         state.nextJoinRequestId = Math.max(state.nextJoinRequestId,
                 state.joinRequests.stream().mapToInt(JoinRequest::getId).max().orElse(0) + 1);
+        state.nextDiscussionPostId = Math.max(state.nextDiscussionPostId,
+                state.discussionPosts.stream().mapToInt(TeamDiscussionPost::getId).max().orElse(0) + 1);
+        state.nextMeetingId = Math.max(state.nextMeetingId,
+                state.meetings.stream().mapToInt(TeamMeeting::getId).max().orElse(0) + 1);
         state.nextUserAccountId = Math.max(state.nextUserAccountId,
                 state.userAccounts.stream().mapToInt(UserAccount::getId).max().orElse(0) + 1);
     }
@@ -203,6 +240,30 @@ public class FileResearchRepository implements ResearchRepository {
         state.joinRequests.add(req);
     }
 
+    private void seedDemoCollaborationData() {
+        if (state.teams.isEmpty() || state.researchers.isEmpty()) return;
+
+        ResearchTeam firstTeam = state.teams.get(0);
+        int leaderId = firstTeam.getLeaderId();
+        int memberId = firstTeam.getMemberIds().stream().filter(id -> id != leaderId).findFirst().orElse(leaderId);
+
+        state.discussionPosts.add(new TeamDiscussionPost(nextDiscussionPostId(), firstTeam.getId(), leaderId,
+                "Welcome to the team workspace. Please share your literature-review progress and questions here.",
+                LocalDateTime.now().minusHours(6)));
+        if (memberId != leaderId) {
+            state.discussionPosts.add(new TeamDiscussionPost(nextDiscussionPostId(), firstTeam.getId(), memberId,
+                    "I have started reviewing recent papers and will post a short summary before our next meeting.",
+                    LocalDateTime.now().minusHours(3)));
+        }
+
+        state.meetings.add(new TeamMeeting(nextMeetingId(), firstTeam.getId(), leaderId,
+                "Weekly Research Planning Meeting",
+                "Review literature progress, assign next tasks and confirm the methodology discussion agenda.",
+                "https://meet.google.com/",
+                LocalDateTime.now().plusDays(2).withHour(20).withMinute(0).withSecond(0).withNano(0),
+                LocalDateTime.now().minusHours(1)));
+    }
+
     private void seedDemoAccounts() {
         attachDemoAccount("amina@example.edu", "Amina Rahman", UserAccount.Role.STUDENT, "student123");
         attachDemoAccount("nabil@example.edu", "Nabil Hasan", UserAccount.Role.STUDENT, "leader123");
@@ -231,10 +292,14 @@ public class FileResearchRepository implements ResearchRepository {
         private List<Researcher> researchers = new ArrayList<>();
         private List<ResearchTeam> teams = new ArrayList<>();
         private List<JoinRequest> joinRequests = new ArrayList<>();
+        private List<TeamDiscussionPost> discussionPosts = new ArrayList<>();
+        private List<TeamMeeting> meetings = new ArrayList<>();
         private List<UserAccount> userAccounts = new ArrayList<>();
         private int nextResearcherId = 1;
         private int nextTeamId = 1;
         private int nextJoinRequestId = 1;
+        private int nextDiscussionPostId = 1;
+        private int nextMeetingId = 1;
         private int nextUserAccountId = 1;
     }
 }

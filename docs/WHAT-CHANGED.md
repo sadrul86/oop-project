@@ -35,3 +35,17 @@ The old interface allowed a visitor to select any researcher when sending a join
 6. Open **Requests to teams I lead** and approve Amina's request.
 7. Log out and log back in as Amina.
 8. Show the request status as APPROVED and show Amina in the team member list.
+
+
+## Team collaboration update
+
+This version also adds two post-formation collaboration features:
+
+- **Private Team Discussion**: approved members can post research progress, questions and coordination updates. Outsiders can see that a workspace exists but cannot read its content.
+- **Team Meeting System**: approved members can view meeting details and use an online meeting link. Only the team leader can schedule a meeting. The backend validates the leader identity, future date/time and HTTP/HTTPS meeting link.
+- Discussion posts and meetings use new OOP domain classes (`TeamDiscussionPost`, `TeamMeeting`) and a dedicated `CollaborationService`.
+- Both features are stored through the existing `ResearchRepository` abstraction, so they are persisted in `research-data.bin` in the current prototype.
+
+### Updated viva demonstration
+
+After Amina is approved into a team, open that team again and show that the private discussion and meetings area becomes available. Post a discussion update as Amina. Then log in as the team leader and schedule a meeting. Log back in as a normal team member and show that the meeting is visible but the scheduling form is not.
