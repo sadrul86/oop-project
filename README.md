@@ -1,76 +1,92 @@
-# University Research Formation Team System
+# University Research Team Formation System
 
-A complete academic mini-project website built with **Java 21** and **Object-Oriented Programming (OOP)**. It helps students and faculty discover researchers, form research teams, request team membership and match research interests.
+A Java 21 + Object-Oriented Programming university mini-project for realistic research team formation. The application uses only the JDK (no paid services and no external Java dependencies) and can be deployed from GitHub to Render using the included `Dockerfile` and `render.yaml`.
 
-## Main features
+## Main Features
 
-- Responsive university research portal
-- Researcher directory with search and role filters
-- Create researcher profiles
-- Create research teams
-- Team leader and member management
-- Team capacity and lifecycle status
-- Join-request submission
-- Approve/reject join requests
-- Interest-based team matching score
-- Demo dashboard and statistics API
-- File-backed repository with automatic demo data
-- HTML escaping and basic security headers
-- Docker deployment configuration
-- Render free deployment Blueprint
+- Authentication with login/logout sessions
+- Student, Faculty and Administrator account roles
+- One authenticated account linked to one research profile
+- Users edit only their own research profile
+- Searchable researcher directory
+- Logged-in researchers create teams as themselves (no fake leader dropdown)
+- Team ownership: the creator becomes the team leader
+- Logged-in researchers send join requests only as themselves
+- Duplicate join-request prevention
+- A team leader cannot request to join their own team
+- Team leaders can approve/reject only requests sent to teams they lead
+- Users cannot approve their own join request
+- Administrators can review and manage all requests
+- Team capacity validation
+- Interest/skill-based team matching
+- File-backed demo persistence
+- PBKDF2-HMAC-SHA256 password hashing with per-user salt
+- Core Java `HttpServer` web layer
 
-## OOP concepts demonstrated
+## Demo Accounts
 
-- **Encapsulation:** private model state and controlled methods
-- **Abstraction:** `ResearchRepository` interface
-- **Polymorphism:** services depend on the repository interface, not a concrete class
-- **Separation of concerns:** model, repository, service, utility and web layers
-- **Composition:** teams contain researcher/member IDs and services coordinate objects
+| Role | Email | Password | Purpose |
+|---|---|---|---|
+| Student | `amina@example.edu` | `student123` | Send requests and view status |
+| Team Leader | `nabil@example.edu` | `leader123` | Leads "Secure Research Collaboration" and can manage its requests |
+| Faculty Leader | `sara@example.edu` | `faculty123` | Faculty account and leader of "AI for Student Success" |
+| Administrator | `admin@example.edu` | `admin123` | Review/manage all requests |
 
-## Project structure
+These credentials are for academic demonstration only. The application does not store these passwords in plain text; seeded accounts store salted PBKDF2 hashes.
+
+## Realistic Workflow
+
+1. User registers or logs in.
+2. Account identity is connected to one `Researcher` profile.
+3. The user updates their own research interests, skills and availability.
+4. The user browses available teams or uses **My Team Matches**.
+5. A join request is submitted using the logged-in user's researcher ID from the session.
+6. The requester sees the request under **My Join Requests** but cannot approve it.
+7. The destination team's leader logs in and sees the request under **Requests to Teams I Lead**.
+8. Only that leader (or an admin) can approve/reject.
+9. Approval adds the requester to the team and updates the request status.
+
+## OOP Structure
 
 ```text
-university-research-team-system/
-├── src/com/university/research/
-│   ├── Main.java
-│   ├── model/
-│   │   ├── Researcher.java
-│   │   ├── ResearchTeam.java
-│   │   └── JoinRequest.java
-│   ├── repository/
-│   │   ├── ResearchRepository.java
-│   │   └── FileResearchRepository.java
-│   ├── service/
-│   │   ├── ResearchService.java
-│   │   ├── TeamService.java
-│   │   └── MatchingService.java
-│   ├── util/
-│   │   └── WebUtil.java
-│   └── web/
-│       ├── HtmlPages.java
-│       └── ResearchWebServer.java
-├── public/assets/
-│   ├── style.css
-│   └── app.js
-├── docs/
-│   ├── OOP-DESIGN.md
-│   └── DEPLOYMENT.md
-├── Dockerfile
-├── render.yaml
-├── run.sh
-├── run.bat
-└── README.md
+src/com/university/research/
+├── Main.java
+├── model/
+│   ├── UserAccount.java
+│   ├── Researcher.java
+│   ├── ResearchTeam.java
+│   └── JoinRequest.java
+├── repository/
+│   ├── ResearchRepository.java
+│   └── FileResearchRepository.java
+├── service/
+│   ├── AuthenticationService.java
+│   ├── ResearchService.java
+│   ├── TeamService.java
+│   └── MatchingService.java
+├── util/
+│   ├── PasswordUtil.java
+│   └── WebUtil.java
+└── web/
+    ├── SessionManager.java
+    ├── ResearchWebServer.java
+    └── HtmlPages.java
 ```
 
-## Run locally
+### OOP concepts demonstrated
 
-### Requirements
+- **Encapsulation:** model fields are private and modified through controlled methods.
+- **Abstraction:** `ResearchRepository` defines persistence operations independently of the file implementation.
+- **Polymorphism:** services depend on the `ResearchRepository` interface, so another implementation could replace file storage.
+- **Composition:** services collaborate with repository objects rather than putting all logic in the web server.
+- **Separation of concerns:** authentication, research profiles, teams, matching, persistence and HTTP presentation are separate classes.
+- **Authorization in business logic:** `TeamService` verifies who is permitted to decide a request even if a user manually submits an HTTP request.
 
-Install **JDK 21**.
+## Run Locally
+
+Requires JDK 21.
 
 ### Windows
-
-Double-click `run.bat` or run:
 
 ```bat
 run.bat
@@ -83,92 +99,19 @@ chmod +x run.sh
 ./run.sh
 ```
 
-Then open:
+Then open `http://localhost:8080`.
 
-```text
-http://localhost:8080
-```
+## Free Deployment
 
-Health check:
+This repository already contains:
 
-```text
-http://localhost:8080/health
-```
+- `Dockerfile`
+- `render.yaml`
 
-Statistics API:
+Push the project to GitHub. If your existing Render Blueprint is already connected to that GitHub repository, committing these updated files to the `main` branch will trigger a new deployment automatically.
 
-```text
-http://localhost:8080/api/stats
-```
+The application reads Render's `PORT` environment variable and listens on `0.0.0.0`.
 
-## Put the project on GitHub
+## Important Demo Note
 
-Create a new empty **public** GitHub repository named `university-research-team-system`.
-
-From the extracted project folder:
-
-```bash
-git init
-git add .
-git commit -m "Initial university research team system"
-git branch -M main
-git remote add origin https://github.com/YOUR-USERNAME/university-research-team-system.git
-git push -u origin main
-```
-
-Replace `YOUR-USERNAME` with your GitHub username.
-
-## Make it online for free
-
-This Java project cannot run directly on GitHub Pages because it needs a Java server process. Use GitHub to store the source code and connect the repository to a free Render web service.
-
-The included `render.yaml` and `Dockerfile` already contain the required deployment configuration.
-
-### Render steps
-
-1. Sign in to Render with GitHub.
-2. Select **New > Blueprint**.
-3. Connect this GitHub repository.
-4. Render detects `render.yaml`.
-5. Confirm the web service uses the **Free** plan.
-6. Deploy.
-7. Wait for the Docker build to complete.
-8. Open the generated `https://...onrender.com` address.
-
-When you later change the code:
-
-```bash
-git add .
-git commit -m "Update website"
-git push
-```
-
-Render will redeploy the latest `main` branch automatically.
-
-## Important free-hosting note
-
-The current repository stores application data in `data/research-data.bin`. This is ideal for a simple OOP classroom demo and requires no paid database.
-
-On a free cloud web service, local storage may be temporary. If the service sleeps, restarts or redeploys, newly entered data can be lost. The application automatically recreates the included demo data when the data file does not exist.
-
-If your teacher requires long-term persistent data, the clean repository interface makes it possible to add a PostgreSQL-backed implementation later.
-
-## Demo workflow for presentation
-
-1. Open the home dashboard.
-2. Show the **Researchers** page and search by interest.
-3. Add a new researcher.
-4. Open **Teams** and create a new research team.
-5. Open a team and submit a join request.
-6. Open **Requests** and approve the request.
-7. Return to the team and show the new member.
-8. Open a researcher's **Find matches** page and explain the matching score.
-9. Explain the OOP package structure using `docs/OOP-DESIGN.md`.
-
-## Suggested viva explanation
-
-> The system follows a layered object-oriented design. Domain classes represent researchers, teams and join requests. Business rules are handled by service classes. Persistence is abstracted through the `ResearchRepository` interface, so storage can be replaced without changing the business layer. The web layer only handles HTTP requests and renders responses. This separation improves maintainability, testability and extensibility.
-
-## Academic scope
-
-The project is intentionally generic: no student name, student ID, supervisor name or university identity is hard-coded into the site.
+The free deployment uses a local binary data file (`data/research-data.bin`). This is suitable for a course demonstration, but cloud free-tier local storage can be ephemeral. For a production university system, use a managed relational database and stronger production security controls.

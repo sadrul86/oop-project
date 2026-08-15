@@ -3,6 +3,7 @@ package com.university.research.repository;
 import com.university.research.model.JoinRequest;
 import com.university.research.model.ResearchTeam;
 import com.university.research.model.Researcher;
+import com.university.research.model.UserAccount;
 
 import java.util.List;
 import java.util.Optional;
@@ -22,4 +23,10 @@ public interface ResearchRepository {
     Optional<JoinRequest> findJoinRequestById(int id);
     JoinRequest saveJoinRequest(JoinRequest request);
     int nextJoinRequestId();
+
+    List<UserAccount> findAllUserAccounts();
+    Optional<UserAccount> findUserAccountById(int id);
+    Optional<UserAccount> findUserAccountByEmail(String email);
+    UserAccount saveUserAccount(UserAccount account);
+    int nextUserAccountId();
 }

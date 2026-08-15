@@ -3,6 +3,8 @@ package com.university.research.repository;
 import com.university.research.model.JoinRequest;
 import com.university.research.model.ResearchTeam;
 import com.university.research.model.Researcher;
+import com.university.research.model.UserAccount;
+import com.university.research.util.PasswordUtil;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -10,6 +12,7 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 public class FileResearchRepository implements ResearchRepository {
@@ -19,16 +22,14 @@ public class FileResearchRepository implements ResearchRepository {
     public FileResearchRepository(Path dataFile) {
         this.dataFile = dataFile;
         this.state = loadState();
-        if (state.researchers.isEmpty()) {
-            seedDemoData();
-            persist();
-        }
+        normalizeState();
+        if (state.researchers.isEmpty()) seedDemoData();
+        if (state.userAccounts.isEmpty()) seedDemoAccounts();
+        persist();
     }
 
     @Override
-    public synchronized List<Researcher> findAllResearchers() {
-        return new ArrayList<>(state.researchers);
-    }
+    public synchronized List<Researcher> findAllResearchers() { return new ArrayList<>(state.researchers); }
 
     @Override
     public synchronized Optional<Researcher> findResearcherById(int id) {
@@ -44,14 +45,10 @@ public class FileResearchRepository implements ResearchRepository {
     }
 
     @Override
-    public synchronized int nextResearcherId() {
-        return state.nextResearcherId++;
-    }
+    public synchronized int nextResearcherId() { return state.nextResearcherId++; }
 
     @Override
-    public synchronized List<ResearchTeam> findAllTeams() {
-        return new ArrayList<>(state.teams);
-    }
+    public synchronized List<ResearchTeam> findAllTeams() { return new ArrayList<>(state.teams); }
 
     @Override
     public synchronized Optional<ResearchTeam> findTeamById(int id) {
@@ -67,14 +64,10 @@ public class FileResearchRepository implements ResearchRepository {
     }
 
     @Override
-    public synchronized int nextTeamId() {
-        return state.nextTeamId++;
-    }
+    public synchronized int nextTeamId() { return state.nextTeamId++; }
 
     @Override
-    public synchronized List<JoinRequest> findAllJoinRequests() {
-        return new ArrayList<>(state.joinRequests);
-    }
+    public synchronized List<JoinRequest> findAllJoinRequests() { return new ArrayList<>(state.joinRequests); }
 
     @Override
     public synchronized Optional<JoinRequest> findJoinRequestById(int id) {
@@ -90,9 +83,34 @@ public class FileResearchRepository implements ResearchRepository {
     }
 
     @Override
-    public synchronized int nextJoinRequestId() {
-        return state.nextJoinRequestId++;
+    public synchronized int nextJoinRequestId() { return state.nextJoinRequestId++; }
+
+    @Override
+    public synchronized List<UserAccount> findAllUserAccounts() { return new ArrayList<>(state.userAccounts); }
+
+    @Override
+    public synchronized Optional<UserAccount> findUserAccountById(int id) {
+        return state.userAccounts.stream().filter(u -> u.getId() == id).findFirst();
     }
+
+    @Override
+    public synchronized Optional<UserAccount> findUserAccountByEmail(String email) {
+        String normalized = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+        return state.userAccounts.stream()
+                .filter(u -> u.getEmail().equalsIgnoreCase(normalized))
+                .findFirst();
+    }
+
+    @Override
+    public synchronized UserAccount saveUserAccount(UserAccount account) {
+        state.userAccounts.removeIf(u -> u.getId() == account.getId());
+        state.userAccounts.add(account);
+        persist();
+        return account;
+    }
+
+    @Override
+    public synchronized int nextUserAccountId() { return state.nextUserAccountId++; }
 
     private State loadState() {
         try {
@@ -105,6 +123,21 @@ public class FileResearchRepository implements ResearchRepository {
             System.err.println("Could not read existing data file. Starting with demo data: " + e.getMessage());
         }
         return new State();
+    }
+
+    private void normalizeState() {
+        if (state.researchers == null) state.researchers = new ArrayList<>();
+        if (state.teams == null) state.teams = new ArrayList<>();
+        if (state.joinRequests == null) state.joinRequests = new ArrayList<>();
+        if (state.userAccounts == null) state.userAccounts = new ArrayList<>();
+        state.nextResearcherId = Math.max(state.nextResearcherId,
+                state.researchers.stream().mapToInt(Researcher::getId).max().orElse(0) + 1);
+        state.nextTeamId = Math.max(state.nextTeamId,
+                state.teams.stream().mapToInt(ResearchTeam::getId).max().orElse(0) + 1);
+        state.nextJoinRequestId = Math.max(state.nextJoinRequestId,
+                state.joinRequests.stream().mapToInt(JoinRequest::getId).max().orElse(0) + 1);
+        state.nextUserAccountId = Math.max(state.nextUserAccountId,
+                state.userAccounts.stream().mapToInt(UserAccount::getId).max().orElse(0) + 1);
     }
 
     private void persist() {
@@ -170,13 +203,38 @@ public class FileResearchRepository implements ResearchRepository {
         state.joinRequests.add(req);
     }
 
+    private void seedDemoAccounts() {
+        attachDemoAccount("amina@example.edu", "Amina Rahman", UserAccount.Role.STUDENT, "student123");
+        attachDemoAccount("nabil@example.edu", "Nabil Hasan", UserAccount.Role.STUDENT, "leader123");
+        attachDemoAccount("sara@example.edu", "Dr. Sara Karim", UserAccount.Role.FACULTY, "faculty123");
+        attachDemoAccount("farhan@example.edu", "Farhan Islam", UserAccount.Role.STUDENT, "student123");
+        attachDemoAccount("mehjabin@example.edu", "Mehjabin Noor", UserAccount.Role.STUDENT, "student123");
+        attachDemoAccount("imran@example.edu", "Dr. Imran Chowdhury", UserAccount.Role.FACULTY, "faculty123");
+        createAccount("admin@example.edu", "System Admin", UserAccount.Role.ADMIN, "admin123", null);
+    }
+
+    private void attachDemoAccount(String email, String name, UserAccount.Role role, String password) {
+        Integer researcherId = state.researchers.stream()
+                .filter(r -> r.getEmail().equalsIgnoreCase(email))
+                .map(Researcher::getId).findFirst().orElse(null);
+        createAccount(email, name, role, password, researcherId);
+    }
+
+    private void createAccount(String email, String name, UserAccount.Role role, String password, Integer researcherId) {
+        String salt = PasswordUtil.newSalt();
+        state.userAccounts.add(new UserAccount(nextUserAccountId(), email.toLowerCase(Locale.ROOT), name, role,
+                salt, PasswordUtil.hash(password, salt), researcherId, true));
+    }
+
     private static class State implements Serializable {
         private static final long serialVersionUID = 1L;
         private List<Researcher> researchers = new ArrayList<>();
         private List<ResearchTeam> teams = new ArrayList<>();
         private List<JoinRequest> joinRequests = new ArrayList<>();
+        private List<UserAccount> userAccounts = new ArrayList<>();
         private int nextResearcherId = 1;
         private int nextTeamId = 1;
         private int nextJoinRequestId = 1;
+        private int nextUserAccountId = 1;
     }
 }

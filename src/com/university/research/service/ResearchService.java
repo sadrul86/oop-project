@@ -29,31 +29,16 @@ public class ResearchService {
                 .orElseThrow(() -> new IllegalArgumentException("Researcher not found."));
     }
 
-    public Researcher createResearcher(String name, String email, String department, String role,
-                                       String interests, String skills, String bio) {
-        require(name, "Name");
-        require(email, "Email");
+    public Researcher updateOwnProfile(int researcherId, String department,
+                                       String interests, String skills, String bio,
+                                       boolean available) {
         require(department, "Department");
-        if (!email.contains("@")) throw new IllegalArgumentException("Enter a valid email address.");
-
-        Researcher.Role parsedRole;
-        try {
-            parsedRole = Researcher.Role.valueOf(role == null ? "STUDENT" : role.trim().toUpperCase(Locale.ROOT));
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Role must be STUDENT or FACULTY.");
-        }
-
-        Researcher researcher = new Researcher(
-                repository.nextResearcherId(),
-                name.trim(),
-                email.trim(),
-                department.trim(),
-                parsedRole,
-                splitCsv(interests),
-                splitCsv(skills),
-                bio == null ? "" : bio.trim(),
-                true
-        );
+        Researcher researcher = getResearcher(researcherId);
+        researcher.setDepartment(department.trim());
+        researcher.setResearchInterests(splitCsv(interests));
+        researcher.setSkills(splitCsv(skills));
+        researcher.setBio(bio == null ? "" : bio.trim());
+        researcher.setAvailable(available);
         return repository.saveResearcher(researcher);
     }
 

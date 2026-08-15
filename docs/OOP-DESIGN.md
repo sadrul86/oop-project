@@ -1,31 +1,31 @@
-# OOP Design Notes
+# OOP and Authorization Design
 
-## Main classes
+## Domain Objects
 
-- `Researcher`: encapsulates a researcher's identity, department, role, interests, skills and availability.
-- `ResearchTeam`: encapsulates team state, leader, members, target size and lifecycle status.
-- `JoinRequest`: encapsulates a request to join a team and its approval status.
+`UserAccount` represents authenticated identity and role. `Researcher` represents the academic research profile. `ResearchTeam` owns its member IDs and leader ID. `JoinRequest` stores the requester, destination team and lifecycle status.
 
-## Abstraction and interfaces
+## Repository Abstraction
 
-`ResearchRepository` is an interface. The rest of the application depends on this abstraction instead of a concrete storage class.
+`ResearchRepository` is an interface. `FileResearchRepository` is one concrete implementation. Services depend on the interface rather than the concrete storage class, demonstrating abstraction and polymorphism.
 
-`FileResearchRepository` implements the interface and stores objects in a local serialized file. Another implementation such as `PostgresResearchRepository` can replace it later without changing the service classes.
+## Service Layer
 
-## Encapsulation
+- `AuthenticationService`: account login and registration.
+- `ResearchService`: research profile searching and self-profile updates.
+- `TeamService`: team creation, join-request validation and authorization.
+- `MatchingService`: profile-to-team compatibility calculation.
 
-Fields are private. State is changed through methods such as `ResearchTeam.addMember()` and setter methods. Team capacity and duplicate-member rules are protected inside domain/service logic.
+## Important Authorization Rules
 
-## Polymorphism
+`ResearchWebServer` gets the current account from a secure random session token. Personal actions do not accept a researcher ID chosen by the browser. Instead, the server resolves the researcher ID from the authenticated account.
 
-The application uses the `ResearchRepository` interface type in services and in `Main`. Any class implementing that interface can be substituted at runtime.
+`TeamService.approveRequest(...)` and `rejectRequest(...)` verify that the acting researcher is the leader of the destination team unless the account is an administrator. This protects the operation even if someone tries to bypass the user interface.
 
-## Separation of responsibilities
+The service also blocks:
 
-- `model/`: domain objects.
-- `repository/`: persistence abstraction and storage.
-- `service/`: business rules for profiles, teams and matching.
-- `web/`: HTTP routing and HTML rendering.
-- `util/`: form parsing, encoding and HTML escaping.
-
-This structure keeps UI code separate from core business rules and demonstrates standard object-oriented design.
+- self-joining by a team leader
+- duplicate pending or approved join requests
+- joining a team that is already full
+- joining a team when already a member
+- deciding a request that is no longer pending
+- non-leaders deciding another team's requests
